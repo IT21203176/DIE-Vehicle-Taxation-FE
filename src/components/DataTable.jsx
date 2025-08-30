@@ -25,6 +25,8 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
   const [preserveCurrencySelection, setPreserveCurrencySelection] = useState(false);
   const [isDisplayDataModified, setIsDisplayDataModified] = useState(false);
   const [search, setSearch] = useState("");
+  const [editingCells, setEditingCells] = useState({});
+  const [tempValues, setTempValues] = useState({});
   const inputRefs = useRef({});
   const [inputFieldOrder, setInputFieldOrder] = useState([]);
 
@@ -57,6 +59,8 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     
     return baseFields;
   };
+
+  const redFontColumns = ["dipFOB", "freight", "insurance", "other"];
 
   useEffect(() => {
     if (editingId || addingNew) {
@@ -205,7 +209,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     return baseStyle;
   };
 
-  const getCellStyle = (priceType, isEditing = false, isAdding = false) => {
+  const getCellStyle = (priceType, isEditing = false, isAdding = false, columnName = null) => {
     let baseStyle = {};
     
     if (priceType === "webValue") {
@@ -216,7 +220,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     } else {
       baseStyle = {
         backgroundColor: "#fffde7",
-        color: "#5b3617ff",
+        color: "red",
       };
     }
 
@@ -232,10 +236,14 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       return baseStyle;
     }
 
+    if (columnName && redFontColumns.includes(columnName)) {
+      baseStyle.color = "red";
+    }
+
     return baseStyle;
   };
 
-  const getPriceTypeIndicator = (priceType) => {
+  /*const getPriceTypeIndicator = (priceType) => {
     if (priceType === "webValue") {
       return (
         <span
@@ -273,7 +281,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
         </span>
       );
     }
-  };
+  };*/
 
   const recalculateVehicle = (vehicle, newExchangeRate, newCurrency) => {
     const updatedPriceCalculations = vehicle.priceCalculations.map(priceCalc => {
@@ -293,7 +301,18 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       const pal = vehicle.pal || 0;
       const ssl = vehicle.ssl || 0;
 
-      const dipFOB = (priceValue * 100 / 110) * 0.85;
+      // Use manual DIP FOB if available, otherwise calculate it
+      let dipFOB;
+      if (priceCalc.manualDipFOB) {
+        dipFOB = priceCalc.manualDipFOB;
+      } else {
+        if (priceCalc.priceType === 'yellowBook') {
+          dipFOB = priceValue * 0.85;
+        } else if (priceCalc.priceType === 'webValue') {
+          dipFOB = (priceValue * 100 / 110) * 0.85;
+        }
+      }
+      
       const cifJPY = dipFOB + freight + insurance + other;
       const cifLKR = cifJPY * newExchangeRate;
       const generalDuty = cifLKR * generalDutyRate;
@@ -305,6 +324,14 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       
       const cifJPY1 = dipFOB + freight + insurance;
       const cifLKR1 = cifJPY1 * newExchangeRate;
+      
+      // Debug: Log luxury tax calculation details
+      console.log("Luxury tax calculation details:");
+      console.log("cifLKR1:", cifLKR1);
+      console.log("luxTaxFD:", luxTaxFD);
+      console.log("luxuryRate:", luxuryRate);
+      console.log("cifLKR1 - luxTaxFD:", cifLKR1 - luxTaxFD);
+      
       const luxuryTaxCalculation = Math.max(0, cifLKR1 - luxTaxFD);
       const luxuryTax = luxuryTaxCalculation * luxuryRate;
       
@@ -331,6 +358,106 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       ...vehicle,
       exchangeRate: newExchangeRate,
       rateCurrency: newCurrency,
+      priceCalculations: updatedPriceCalculations
+    };
+  };
+
+  const recalculateWithManualValue = (vehicle, field, newValue, priceType) => {
+    const updatedPriceCalculations = vehicle.priceCalculations.map(priceCalc => {
+      if (priceCalc.priceType !== priceType && field === 'dipFOB') {
+        return priceCalc; // dipFOB is price-type specific
+      }
+      
+      if (priceCalc.priceType !== priceType && field === 'priceValue') {
+        return priceCalc; // priceValue is price-type specific
+      }
+      
+      // Get values, using new value for changed field
+      let dipFOB, freight, insurance, other;
+      
+      if (field === 'dipFOB' && priceCalc.priceType === priceType) {
+        dipFOB = newValue;
+      } else {
+        dipFOB = priceCalc.manualDipFOB;
+        if (!dipFOB) {
+          if (priceCalc.priceType === 'yellowBook') {
+            dipFOB = priceCalc.priceValue * 0.85;
+          } else if (priceCalc.priceType === 'webValue') {
+            dipFOB = (priceCalc.priceValue * 100 / 110) * 0.85;
+          }
+        }
+      }
+      
+      // Handle priceValue changes
+      if (field === 'priceValue' && priceCalc.priceType === priceType) {
+        // Recalculate DIP FOB based on new price value
+        if (!priceCalc.manualDipFOB) {
+          if (priceType === 'yellowBook') {
+            dipFOB = newValue * 0.85;
+          } else if (priceType === 'webValue') {
+            dipFOB = (newValue * 100 / 110) * 0.85;
+          }
+        }
+      }
+      
+      freight = field === 'freight' ? newValue : (vehicle.freight || 0);
+      insurance = field === 'insurance' ? newValue : (vehicle.insurance || 0);
+      other = field === 'other' ? newValue : (vehicle.other || 0);
+      
+      const cm3 = vehicle.cm3 || 0;
+      const pUnit = vehicle.pPerUnitLKR || 0;
+      const pPerCM3 = vehicle.pPerCM3LKR || 0;
+      const generalDutyRate = vehicle.generalDutyRate || 0.2;
+      const surchargeRate = vehicle.surchargeRate || 0.5;
+      const vatRate = vehicle.vatRate || 0.18;
+      const luxTaxFD = vehicle.luxTaxFD || 0;
+      const luxuryRate = vehicle.luxuryTaxRateValue || 0;
+      const pal = vehicle.pal || 0;
+      const ssl = vehicle.ssl || 0;
+      const exchangeRate = vehicle.exchangeRate || exchangeRates[selectedCurrency];
+
+      // Recalculate dependent values
+      const cifJPY = dipFOB + freight + insurance + other;
+      const cifLKR = cifJPY * exchangeRate;
+      const generalDuty = cifLKR * generalDutyRate;
+      const surcharge = generalDuty * surchargeRate;
+      const pCM3LKR = cm3 * pPerCM3;
+      
+      const vatBase = (cifLKR * 0.1) + cifLKR + generalDuty + surcharge + pUnit + pCM3LKR + pal + ssl;
+      const vat = vatBase * vatRate;
+      
+      const cifJPY1 = dipFOB + freight + insurance;
+      const cifLKR1 = cifJPY1 * exchangeRate;
+      
+      // FIX: Luxury tax calculation should be based on the correct formula
+      // The issue might be that luxTaxFD is too high or luxuryRate is 0
+      const luxuryTaxCalculation = Math.max(0, cifLKR1 - luxTaxFD);
+      const luxuryTax = luxuryTaxCalculation * luxuryRate;
+      
+      const totalTax = generalDuty + surcharge + pUnit + pCM3LKR + pal + ssl + vat + luxuryTax + 1750 + 15000;
+
+      return {
+        ...priceCalc,
+        manualDipFOB: field === 'dipFOB' ? newValue : priceCalc.manualDipFOB,
+        priceValue: field === 'priceValue' ? newValue : priceCalc.priceValue,
+        dipFOB: Math.round(dipFOB),
+        cifJPY: Math.round(cifJPY),
+        cifLKR: Math.round(cifLKR),
+        generalDuty: Math.round(generalDuty),
+        surcharge: Math.round(surcharge),
+        pPerCM3LKR: Math.round(pCM3LKR),
+        vat: Math.round(vat),
+        luxuryTax: Math.round(luxuryTax),
+        luxuryTaxCalculation: Math.round(luxuryTaxCalculation),
+        tax: Math.round(totalTax),
+        cifJPY1: Math.round(cifJPY1),
+        cifLKR1: Math.round(cifLKR1),
+      };
+    });
+
+    return {
+      ...vehicle,
+      [field]: ['freight', 'insurance', 'other'].includes(field) ? newValue : vehicle[field],
       priceCalculations: updatedPriceCalculations
     };
   };
@@ -555,6 +682,8 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     setError("");
     inputRefs.current = {};
     setInputFieldOrder([]);
+    setEditingCells({});
+    setTempValues({});
   };
 
   const handleChange = (e) => {
@@ -619,6 +748,67 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       console.error("Error saving vehicle:", err);
       setError(err.response?.data?.message || "Failed to save vehicle.");
     }
+  };
+
+  const handleCellEditStart = (rowId, priceType, field, currentValue) => {
+    setEditingCells(prev => ({
+      ...prev,
+      [`${rowId}_${priceType}_${field}`]: true
+    }));
+    setTempValues(prev => ({
+      ...prev,
+      [`${rowId}_${priceType}_${field}`]: currentValue.toString()
+    }));
+  };
+
+  const handleCellEditCancel = (rowId, priceType, field) => {
+    setEditingCells(prev => ({
+      ...prev,
+      [`${rowId}_${priceType}_${field}`]: false
+    }));
+    setTempValues(prev => {
+      const newValues = {...prev};
+      delete newValues[`${rowId}_${priceType}_${field}`];
+      return newValues;
+    });
+  };
+
+  const handleCellValueChange = (rowId, priceType, field, value) => {
+    setTempValues(prev => ({
+      ...prev,
+      [`${rowId}_${priceType}_${field}`]: value
+    }));
+  };
+
+  const handleCellSubmit = (row, field) => {
+    const newValue = parseFloat(tempValues[`${row._id}_${row.priceType}_${field}`]);
+    if (isNaN(newValue) || newValue < 0) {
+      setError(`Please enter a valid ${field} value.`);
+      return;
+    }
+
+    // Find the original vehicle data
+    const originalVehicle = data.find(v => v._id === (row.originalId || row._id));
+    if (!originalVehicle) {
+      setError("Vehicle not found.");
+      return;
+    }
+
+    // Recalculate with the new value
+    const updatedVehicle = recalculateWithManualValue(originalVehicle, field, newValue, row.priceType);
+    
+    // Update display data
+    const updatedDisplayData = displayData.map(vehicle => {
+      if (vehicle._id === originalVehicle._id) {
+        return updatedVehicle;
+      }
+      return vehicle;
+    });
+    
+    setDisplayData(updatedDisplayData);
+    setIsDisplayDataModified(true);
+    handleCellEditCancel(row._id, row.priceType, field);
+    setError("");
   };
 
   const tableRows = [];
@@ -697,7 +887,6 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
             generalDuty: priceCalc.generalDuty,
             surcharge: priceCalc.surcharge,
             // Don't override pPerUnitLKR - keep the original from vehicle
-            // pPerCM3LKR: priceCalc.pPerCM3LKR,  // ← Remove this line
             calculatedPPerCM3LKR: priceCalc.pPerCM3LKR, // Store calculated value separately if needed
             vat: priceCalc.vat,
             luxuryTax: priceCalc.luxuryTax,
@@ -748,6 +937,8 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     "pPerUnitLKR", "pPerCM3LKR", "pal", "ssl", "exchangeRate",
     "generalDutyRate", "surchargeRate", "vatRate", "luxTaxFD", "luxuryTaxRateValue"
   ];
+
+  const inlineEditableFields = ["priceValue", "dipFOB", "freight", "insurance", "other"];
 
   if (filteredData.length === 0 && !addingNew && !editingId) return <p>No vehicles found</p>;
 
@@ -966,14 +1157,16 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
         overflowY: "auto",
         overflowX: role === "AGENT" ? "hidden" : "auto",
         border: "1px solid #ddd",
-        borderRadius: "6px"
+        borderRadius: "6px",
+        direction: "rtl"
       }}>
         <table className="vehicles-table" style={{
           width: "100%",
           borderCollapse: "collapse",
           fontSize: "11px",
           lineHeight: "1.2",
-          tableLayout: role === "AGENT" ? "auto" : "fixed"
+          tableLayout: role === "AGENT" ? "auto" : "fixed",
+          direction: "ltr"
         }}>
           <thead style={{
             position: "sticky",
@@ -1005,15 +1198,16 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                   textAlign: "center",
                   fontWeight: "bold",
                   backgroundColor: "#f8f9fa",
-                  border: "1px solid #dee2e6",
-                  minWidth: role === "AGENT" ? "80px" : "100px",
+                  border: "1px solid ",
+                    minWidth: role === "AGENT" ? "80px" : "100px",
                   position: "sticky",
                   top: 0,
                   zIndex: 11,
                   whiteSpace: col === 'priceValue' ? 'normal' : 'nowrap',
                   fontSize: "11px",
                   lineHeight: "1.1",
-                  height: col === 'priceValue' ? '45px' : '35px'
+                  height: col === 'priceValue' ? '45px' : '35px',
+                  color: redFontColumns.includes(col) ? "#2CFF05" : "inherit"
                 }}>
                   {formatColumnHeader(col)}
                 </th>
@@ -1053,92 +1247,204 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                   className={`${row.isMultiRow ? 'multi-row-vehicle' : ''} ${isEditing ? 'editing-row' : ''}`}
                 >
                   {(!row.isMultiRow || row.rowIndex === 0) && (
-                    <td 
-                      className="manufacturer-cell" 
-                      style={{
-                        ...(isNewRow || isEditing ? 
-                          (row.priceType === "webValue" ? 
-                            { backgroundColor: "#e3f2fd", color: "#0c0faeff" } : 
-                            { backgroundColor: "#fffde7", color: "#5b3617ff" }
-                          ) : cellStyle),
-                        verticalAlign: "middle",
-                        padding: "3px 4px",
-                        textAlign: "center",
-                        border: "1px solid #dee2e6",
-                        height: "28px",
-                      }}
-                      {...(row.isMultiRow ? { rowSpan: row.totalRows } : {})}
-                    >
-                      <div style={{ 
-                        display: "flex", 
-                        flexDirection: "column", 
-                        alignItems: "center", 
-                        justifyContent: "center",
-                        gap: "2px"
-                      }}>
-                        {manufacturer ? (
-                          <a
-                            href={manufacturer.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="manufacturer-link"
-                            title={`Visit ${manufacturer.name} official website`}
-                            style={{ 
-                              display: "flex", 
-                              alignItems: "center", 
-                              textDecoration: "none"
-                            }}
-                          >
-                            <img
-                              src={manufacturer.logo}
-                              alt={manufacturer.name}
-                              className="manufacturer-logo"
-                              style={{ width: "24px", height: "24px", objectFit: "contain" }}
-                              onError={(e) => {
-                                e.target.style.display = "none";
-                                e.target.nextSibling.style.display = "inline";
-                              }}
-                            />
-                            <span
-                              className="manufacturer-name"
-                              style={{ display: "none", fontSize: "10px", textAlign: "center" }}
-                            >
-                              {manufacturer.name}
-                            </span>
-                          </a>
-                        ) : (
-                          <span className="unknown-manufacturer" style={{ 
-                            fontSize: "9px", 
-                            textAlign: "center",
-                            width: "24px",
-                            height: "24px",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center"
-                          }}>
-                            Unknown
-                          </span>
-                        )}
-                        
-                        <span style={{ fontSize: "16px" }}>{currencyFlags[selectedCurrency]}</span>
-                        
-                        {row.isMultiRow ? (
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0px" }}>
-                            {tableRows
-                              .filter(r => (r.originalId === (row.originalId || row._id)) || (r._id === row._id && !r.originalId))
-                              .map((vehicleRow, idx) => (
-                                <span key={`${vehicleRow.priceType}_${idx}`}>
-                                  {getPriceTypeIndicator(vehicleRow.priceType)}
-                                </span>
-                              ))
-                            }
-                          </div>
-                        ) : (
-                          getPriceTypeIndicator(row.priceType)
-                        )}
-                      </div>
-                    </td>
-                  )}
+  <td 
+    className="manufacturer-cell" 
+    style={{
+      ...(isNewRow || isEditing ? 
+        (row.priceType === "webValue" ? 
+          { backgroundColor: "#e3f2fd", color: "#0c0faeff" } : 
+          { backgroundColor: "#fffde7", color: "#5b3617ff" }
+        ) : cellStyle),
+      verticalAlign: "middle",
+      padding: "6px 4px",
+      textAlign: "center",
+      border: "1px solid #dee2e6",
+      height: "auto",
+      minHeight: "60px"
+    }}
+    {...(row.isMultiRow ? { rowSpan: row.totalRows } : {})}
+  >
+    <div style={{ 
+      display: "flex", 
+      flexDirection: "row", 
+      alignItems: "center", 
+      justifyContent: "center",
+      gap: "6px",
+      height: "100%",
+      padding: "2px"
+    }}>
+      {/* Country Flag - Left */}
+      <div style={{ 
+        fontSize: "16px", 
+        lineHeight: "1",
+        display: "flex",
+        alignItems: "center"
+      }}>
+        {currencyFlags[selectedCurrency]}
+      </div>
+      
+      {/* Manufacturer Logo - Middle */}
+      <div style={{ 
+        display: "flex", 
+        alignItems: "center", 
+        justifyContent: "center",
+        minWidth: "24px",
+        minHeight: "24px"
+      }}>
+        {manufacturer ? (
+          <a
+            href={manufacturer.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="manufacturer-link"
+            title={`Visit ${manufacturer.name} official website`}
+            style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              textDecoration: "none"
+            }}
+          >
+            <img
+              src={manufacturer.logo}
+              alt={manufacturer.name}
+              className="manufacturer-logo"
+              style={{ 
+                width: "24px", 
+                height: "24px", 
+                objectFit: "contain",
+                maxWidth: "24px",
+                maxHeight: "24px"
+              }}
+              onError={(e) => {
+                e.target.style.display = "none";
+                e.target.nextSibling.style.display = "flex";
+              }}
+            />
+            <span
+              className="manufacturer-name"
+              style={{ 
+                display: "none", 
+                fontSize: "8px", 
+                textAlign: "center",
+                alignItems: "center",
+                justifyContent: "center",
+                width: "24px",
+                height: "24px"
+              }}
+            >
+              {manufacturer.name}
+            </span>
+          </a>
+        ) : (
+          <div style={{ 
+            fontSize: "7px", 
+            textAlign: "center",
+            width: "24px",
+            height: "24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#f5f5f5",
+            borderRadius: "2px",
+            color: "#666"
+          }}>
+            Unknown
+          </div>
+        )}
+      </div>
+      
+      {/* Price Type Indicators - Right */}
+      <div style={{ 
+        display: "flex", 
+        flexDirection: "column",
+        alignItems: "center", 
+        justifyContent: "center",
+        gap: "2px",
+        minWidth: "28px"
+      }}>
+        {row.isMultiRow ? (
+          // Show all price types vertically for multi-row vehicles
+          tableRows
+            .filter(r => (r.originalId === (row.originalId || row._id)) || (r._id === row._id && !r.originalId))
+            .map((vehicleRow, idx) => (
+              <span key={`${vehicleRow.priceType}_${idx}`}>
+                {vehicleRow.priceType === "webValue" ? (
+                  <span
+                    className="price-type-indicator"
+                    style={{
+                      backgroundColor: "#2196f3",
+                      color: "white",
+                      padding: "1px 6px",
+                      borderRadius: "2px",
+                      fontSize: "9px",
+                      fontWeight: "bold",
+                      display: "block",
+                      textAlign: "center",
+                      minWidth: "20px"
+                    }}
+                  >
+                    WV
+                  </span>
+                ) : (
+                  <span
+                    className="price-type-indicator"
+                    style={{
+                      backgroundColor: "#ffeb3b",
+                      color: "#333",
+                      padding: "1px 6px",
+                      borderRadius: "2px",
+                      fontSize: "9px",
+                      fontWeight: "bold",
+                      display: "block",
+                      textAlign: "center",
+                      minWidth: "20px"
+                    }}
+                  >
+                    YB
+                  </span>
+                )}
+              </span>
+            ))
+        ) : (
+          // Show single price type indicator
+          row.priceType === "webValue" ? (
+            <span
+              className="price-type-indicator"
+              style={{
+                backgroundColor: "#2196f3",
+                color: "white",
+                padding: "2px 6px",
+                borderRadius: "3px",
+                fontSize: "10px",
+                fontWeight: "bold",
+                display: "block",
+                textAlign: "center"
+              }}
+            >
+              WV
+            </span>
+          ) : (
+            <span
+              className="price-type-indicator"
+              style={{
+                backgroundColor: "#ffeb3b",
+                color: "#333",
+                padding: "2px 6px",
+                borderRadius: "3px",
+                fontSize: "10px",
+                fontWeight: "bold",
+                display: "block",
+                textAlign: "center"
+              }}
+            >
+              YB
+            </span>
+          )
+        )}
+      </div>
+    </div>
+  </td>
+)}
 
                   {displayColumns
                     .filter((col) => {
@@ -1157,7 +1463,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                         color: "#5b3617ff",
                       };
                     } else {
-                      columnCellStyle = getCellStyle(row.priceType, isEditing, isNewRow);
+                      columnCellStyle = getCellStyle(row.priceType, isEditing, isNewRow, col);
                     }
 
                     const cellProps = shouldMerge && row.rowIndex === 0 ? { rowSpan: row.totalRows } : {};
@@ -1174,6 +1480,86 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                       border: "1px solid #dee2e6",
                       height: "28px"
                     };
+
+                    // Handle inline editable columns (PRICE VALUE, DIP FOB, FREIGHT, INSURANCE, OTHER)
+                    if (inlineEditableFields.includes(col) && !isEditing && !isNewRow && role === "ADMIN") {
+                      const isEditingCell = editingCells[`${row._id}_${row.priceType}_${col}`];
+                      
+                      return (
+                        <td key={col} style={mergedCellStyle} {...cellProps}>
+                          {isEditingCell ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              <input
+                                type="number"
+                                value={tempValues[`${row._id}_${row.priceType}_${col}`] || 0}
+                                onChange={(e) => handleCellValueChange(row._id, row.priceType, col, e.target.value)}
+                                style={{
+                                  width: "100%",
+                                  padding: "2px 4px",
+                                  border: "1px solid #ccc",
+                                  borderRadius: "2px",
+                                  fontSize: "11px",
+                                  height: "22px"
+                                }}
+                                min="0"
+                                step="1000"
+                                autoFocus
+                              />
+                              <div style={{ display: "flex", gap: "4px", justifyContent: "center" }}>
+                                <button
+                                  onClick={() => handleCellSubmit(row, col)}
+                                  style={{
+                                    padding: "2px 6px",
+                                    backgroundColor: "#28a745",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "2px",
+                                    cursor: "pointer",
+                                    fontSize: "10px"
+                                  }}
+                                >
+                                  ✓
+                                </button>
+                                <button
+                                  onClick={() => handleCellEditCancel(row._id, row.priceType, col)}
+                                  style={{
+                                    padding: "2px 6px",
+                                    backgroundColor: "#dc3545",
+                                    color: "white",
+                                    border: "none",
+                                    borderRadius: "2px",
+                                    cursor: "pointer",
+                                    fontSize: "10px"
+                                  }}
+                                >
+                                  ✗
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <span>{formatNumber(row[col], col)}</span>
+                              <button
+                                onClick={() => handleCellEditStart(row._id, row.priceType, col, row[col] || 0)}
+                                style={{
+                                  padding: "2px 4px",
+                                  backgroundColor: "#17a2b8",
+                                  color: "white",
+                                  border: "none",
+                                  borderRadius: "2px",
+                                  cursor: "pointer",
+                                  fontSize: "10px",
+                                  marginLeft: "4px"
+                                }}
+                                title={`Edit ${col}`}
+                              >
+                                ✎
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      );
+                    }
 
                     if (col === "vehicleType") {
                       return (
