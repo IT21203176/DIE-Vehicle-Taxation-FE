@@ -29,6 +29,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
   const [tempValues, setTempValues] = useState({});
   const inputRefs = useRef({});
   const [inputFieldOrder, setInputFieldOrder] = useState([]);
+  const [isDarkTheme, setIsDarkTheme] = useState(false);
 
   const columnsToHideForAgent = [
     "dipFOB", "cifLKR", "cm3", "generalDuty", "surcharge", "pPerUnitLKR", 
@@ -160,6 +161,13 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     return null;
   };
 
+  useEffect(() => {
+    // Check if dark theme is being used
+    const isDark = document.body.classList.contains('dark') || 
+                   window.matchMedia('(prefers-color-scheme: dark)').matches;
+    setIsDarkTheme(isDark);
+  }, []);
+
   const formatNumber = (value, col) => {
     if (typeof value === "number" && !isNaN(value)) {
       const noRoundCols = [
@@ -220,7 +228,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     } else {
       baseStyle = {
         backgroundColor: "#fffde7",
-        color: "red",
+        color: "#3c2d00ff",
       };
     }
 
@@ -472,9 +480,9 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
   const formatColumnHeader = (col) => {
     if (col === "priceValue") {
       return (
-        <div style={{ lineHeight: '1.1' }}>
-          <div>YELLOW /</div>
-          <div>WEB VALUE</div>
+        <div style={{ lineHeight: '1.1', color: isDarkTheme ? '#fff' : '#fff' }}>
+          <div>WEB VALUE /</div>
+          <div>YELLOW</div>
         </div>
       );
     }
@@ -490,19 +498,25 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       'pPerCM3LKR': 'P Per CM3\nLKR',
       'exchangeRate': 'Exchange\nRate',
       'rateCurrency': 'Currency',
-      'vehicleType': 'Vehicle\nType',
+      'vehicleType': 'Vehicle Model\n(Click to visit website)',
       'fuelType': 'Fuel\nType',
       'engineCC': 'Engine\nCC',
       'vatRate': 'VAT\nRate'
     };
 
+    const headerColor = redFontColumns.includes(col) ? "#55ff37ff" : (isDarkTheme ? '#fff' : '#fff');
+
     if (longHeaders[col]) {
-      return longHeaders[col].split('\n').map((line, index) => (
-        <div key={index} style={{ lineHeight: '1.1' }}>{line}</div>
-      ));
+      return (
+        <div style={{ color: isDarkTheme ? '#fff' : '#fff' }}>
+          {longHeaders[col].split('\n').map((line, index) => (
+            <div key={index} style={{ lineHeight: '1.1' }}>{line}</div>
+          ))}
+        </div>
+      );
     }
     
-    return label;
+    return <span style={{ color: headerColor }}>{label}</span>;
   };
 
   const handleExchangeRateChange = (e) => {
@@ -1087,7 +1101,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
               <SearchBar 
                 search={search} 
                 setSearch={setSearch} 
-                placeholder="Search by Vehicle or HS" 
+                placeholder="Search by Vehicle Model" 
               />
             </div>
           </div>
@@ -1188,9 +1202,10 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                 zIndex: 11,
                 fontSize: "11px",
                 lineHeight: "1.1",
-                height: "35px"
+                height: "35px",
+                color: isDarkTheme ? '#fff' : '#fff'
               }}>
-                {formatColumnHeader("gradeCheck")}
+                {formatColumnHeader("grade Check")}
               </th>
               {displayColumns.map((col) => (
                 <th key={col} style={{
@@ -1198,8 +1213,8 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                   textAlign: "center",
                   fontWeight: "bold",
                   backgroundColor: "#f8f9fa",
-                  border: "1px solid ",
-                    minWidth: role === "AGENT" ? "80px" : "100px",
+                  border: "1px solid #dee2e6",
+                  minWidth: role === "AGENT" ? "80px" : "100px",
                   position: "sticky",
                   top: 0,
                   zIndex: 11,
@@ -1207,7 +1222,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                   fontSize: "11px",
                   lineHeight: "1.1",
                   height: col === 'priceValue' ? '45px' : '35px',
-                  color: redFontColumns.includes(col) ? "#2CFF05" : "inherit"
+                  color: redFontColumns.includes(col) ? "#55ff37ff" : "inherit"
                 }}>
                   {formatColumnHeader(col)}
                 </th>
@@ -1225,7 +1240,8 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                   zIndex: 11,
                   fontSize: "11px",
                   lineHeight: "1.1",
-                  height: "35px"
+                  height: "35px",
+                  color: isDarkTheme ? '#fff' : '#fff'
                 }}>
                   Actions
                 </th>

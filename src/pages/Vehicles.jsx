@@ -95,7 +95,7 @@ const Vehicles = () => {
               className="exchange-rate-btn"
               onClick={openExchangeRates}
             >
-              View Exchange Rates
+              SL Customs Ex. Rates
             </button>
             
             <Navigation/>
