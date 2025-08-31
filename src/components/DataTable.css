@@ -24,8 +24,8 @@
 /* Fixed column widths for consistency */
 .vehicles-table th:nth-child(1), /* Grade Check */
 .vehicles-table td:nth-child(1) {
-  width: 100px;
-  min-width: 100px;
+  width: 90px;
+  min-width: 90px;
 }
 
 .vehicles-table th:nth-child(2), /* HS Code */
@@ -36,14 +36,14 @@
 
 .vehicles-table th:nth-child(3), /* Vehicle Type */
 .vehicles-table td:nth-child(3) {
-  width: 180px;
-  min-width: 180px;
+  width: 220px;
+  min-width: 220px;
 }
 
 .vehicles-table th:nth-child(4), /* Fuel Type */
 .vehicles-table td:nth-child(4) {
-  width: 45px;
-  min-width: 45px;
+  width: 65px;
+  min-width: 65px;
 }
 
 .vehicles-table th:nth-child(5), /* Engine CC */
@@ -54,26 +54,26 @@
 
 .vehicles-table th:nth-child(6), /* Total Tax */
 .vehicles-table td:nth-child(6) {
-  width: 90px;
-  min-width: 90px;
+  width: 100px;
+  min-width: 100px;
 }
 
 .vehicles-table th:nth-child(7), /* Price Value */
 .vehicles-table td:nth-child(7) {
-  width: 90px;
-  min-width: 90px;
+  width: 100px;
+  min-width: 100px;
 }
 
 .vehicles-table th:nth-child(8), /* DIP FOB */
 .vehicles-table td:nth-child(8) {
-  width: 90px;
-  min-width: 90px;
+  width: 100px;
+  min-width: 100px;
 }
 
 .vehicles-table th:nth-child(9), /* Freight */
 .vehicles-table td:nth-child(9) {
-  width: 60px;
-  min-width: 60px;
+  width: 70px;
+  min-width: 70px;
 }
 
 .vehicles-table th:nth-child(10), /* Insurance */
@@ -84,20 +84,20 @@
 
 .vehicles-table th:nth-child(11), /* Other */
 .vehicles-table td:nth-child(11) {
-  width: 70px;
-  min-width: 70px;
+  width: 90px;
+  min-width: 90px;
 }
 
 .vehicles-table th:nth-child(12), /* CIF JPY */
 .vehicles-table td:nth-child(12) {
-  width: 70px;
-  min-width: 70px;
+  width: 90px;
+  min-width: 90px;
 }
 
 .vehicles-table th:nth-child(13), /* CIF LKR */
 .vehicles-table td:nth-child(13) {
-  width: 60px;
-  min-width: 60px;
+  width: 90px;
+  min-width: 90px;
 }
 
 .vehicles-table th:nth-child(14), /* CM3 */
@@ -231,6 +231,10 @@
   word-wrap: break-word;
   overflow: hidden;
   position: relative;
+}
+
+.vehicles-table td {
+  border: 1px solid #000000 !important;
 }
 
 .vehicles-table th {
@@ -757,4 +761,26 @@ button:disabled:hover {
 .vehicles-table tr.editing-row td,
 .vehicles-table tr.new-vehicle-row td {
   vertical-align: middle !important;
+}
+
+/* Hide spinner controls in numeric inputs */
+.edit-input.numeric-input::-webkit-outer-spin-button,
+.edit-input.numeric-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.edit-input.numeric-input {
+  -moz-appearance: textfield;
+}
+
+/* Also apply to price inputs */
+.price-input::-webkit-outer-spin-button,
+.price-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.price-input {
+  -moz-appearance: textfield;
 }
