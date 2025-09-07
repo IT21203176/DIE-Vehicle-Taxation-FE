@@ -27,9 +27,11 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
   const [search, setSearch] = useState("");
   const [editingCells, setEditingCells] = useState({});
   const [tempValues, setTempValues] = useState({});
+  const [manualEdits, setManualEdits] = useState({}); // NEW: Track manual edits
   const inputRefs = useRef({});
   const [inputFieldOrder, setInputFieldOrder] = useState([]);
   const [isDarkTheme, setIsDarkTheme] = useState(false);
+  const [stickyEditButtonsVisible, setStickyEditButtonsVisible] = useState(false); // NEW: For floating buttons
 
   const columnsToHideForAgent = [
     "dipFOB", "cifLKR", "cm3", "generalDuty", "surcharge", "pPerUnitLKR", 
@@ -44,6 +46,25 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     THB: "🇹🇭",
     AUD: "🇦🇺",
     INR: "🇮🇳"
+  };
+
+  // NEW: Function to get the current value considering manual edits
+  const getCurrentValue = (vehicleId, priceType, field) => {
+    const editKey = `${vehicleId}_${priceType}_${field}`;
+    if (manualEdits[editKey] !== undefined) {
+      return manualEdits[editKey];
+    }
+    
+    // Find the original value from displayData
+    const vehicle = displayData.find(v => v._id === vehicleId);
+    if (!vehicle) return 0;
+    
+    if (field === 'priceValue' || field === 'dipFOB') {
+      const priceCalc = vehicle.priceCalculations?.find(pc => pc.priceType === priceType);
+      return priceCalc ? priceCalc[field] || 0 : 0;
+    }
+    
+    return vehicle[field] || 0;
   };
 
   const getInputFieldOrder = () => {
@@ -78,6 +99,16 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     } else if (e.key === 'ArrowLeft') {
       e.preventDefault();
       navigateToPreviousField(currentField);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancel();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) {
+        navigateToPreviousField(currentField);
+      } else {
+        navigateToNextField(currentField);
+      }
     }
   };
 
@@ -138,6 +169,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     setDisplayData([...data]);
     if (!preserveCurrencySelection) {
       setIsDisplayDataModified(false);
+      setManualEdits({}); // NEW: Reset manual edits when data changes
     }
   }, [data, preserveCurrencySelection]);
 
@@ -207,6 +239,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
         backgroundColor: "#fff3cd",
         borderLeft: "4px solid #ffc107",
         boxShadow: "0 2px 8px rgba(255, 193, 7, 0.3)",
+        cursor: "pointer",
       };
     }
 
@@ -214,7 +247,10 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       return baseStyle;
     }
 
-    return baseStyle;
+    return {
+      ...baseStyle,
+      cursor: "pointer",
+    };
   };
 
   const getCellStyle = (priceType, isEditing = false, isAdding = false, columnName = null) => {
@@ -251,53 +287,15 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     return baseStyle;
   };
 
-  /*const getPriceTypeIndicator = (priceType) => {
-    if (priceType === "webValue") {
-      return (
-        <span
-          className="price-type-indicator"
-          style={{
-            backgroundColor: "#2196f3",
-            color: "white",
-            padding: "2px 6px",
-            borderRadius: "3px",
-            fontSize: "10px",
-            fontWeight: "bold",
-            marginBottom: "2px",
-            display: "block"
-          }}
-        >
-          WV
-        </span>
-      );
-    } else {
-      return (
-        <span
-          className="price-type-indicator"
-          style={{
-            backgroundColor: "#ffeb3b",
-            color: "#333",
-            padding: "2px 6px",
-            borderRadius: "3px",
-            fontSize: "10px",
-            fontWeight: "bold",
-            marginBottom: "2px",
-            display: "block"
-          }}
-        >
-          YB
-        </span>
-      );
-    }
-  };*/
-
   const recalculateVehicle = (vehicle, newExchangeRate, newCurrency) => {
     const updatedPriceCalculations = vehicle.priceCalculations.map(priceCalc => {
       const priceValue = priceCalc.priceValue;
       
-      const freight = vehicle.freight || 0;
-      const insurance = vehicle.insurance || 0;
-      const other = vehicle.other || 0;
+      // Use manual values if they exist
+      const freight = getCurrentValue(vehicle._id, priceCalc.priceType, 'freight') || vehicle.freight || 0;
+      const insurance = getCurrentValue(vehicle._id, priceCalc.priceType, 'insurance') || vehicle.insurance || 0;
+      const other = getCurrentValue(vehicle._id, priceCalc.priceType, 'other') || vehicle.other || 0;
+      
       const cm3 = vehicle.cm3 || 0;
       const pUnit = vehicle.pPerUnitLKR || 0;
       const pPerCM3 = vehicle.pPerCM3LKR || 0;
@@ -311,8 +309,9 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
 
       // Use manual DIP FOB if available, otherwise calculate it
       let dipFOB;
-      if (priceCalc.manualDipFOB) {
-        dipFOB = priceCalc.manualDipFOB;
+      const manualDipFOB = getCurrentValue(vehicle._id, priceCalc.priceType, 'dipFOB');
+      if (manualDipFOB !== undefined && manualDipFOB !== null) {
+        dipFOB = manualDipFOB;
       } else {
         if (priceCalc.priceType === 'yellowBook') {
           dipFOB = priceValue * 0.85;
@@ -332,13 +331,6 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       
       const cifJPY1 = dipFOB + freight + insurance;
       const cifLKR1 = cifJPY1 * newExchangeRate;
-      
-      // Debug: Log luxury tax calculation details
-      console.log("Luxury tax calculation details:");
-      console.log("cifLKR1:", cifLKR1);
-      console.log("luxTaxFD:", luxTaxFD);
-      console.log("luxuryRate:", luxuryRate);
-      console.log("cifLKR1 - luxTaxFD:", cifLKR1 - luxTaxFD);
       
       const luxuryTaxCalculation = Math.max(0, cifLKR1 - luxTaxFD);
       const luxuryTax = luxuryTaxCalculation * luxuryRate;
@@ -386,8 +378,11 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       if (field === 'dipFOB' && priceCalc.priceType === priceType) {
         dipFOB = newValue;
       } else {
-        dipFOB = priceCalc.manualDipFOB;
-        if (!dipFOB) {
+        // Use manual value if it exists, otherwise calculate
+        const manualDipFOB = getCurrentValue(vehicle._id, priceCalc.priceType, 'dipFOB');
+        if (manualDipFOB !== undefined && manualDipFOB !== null) {
+          dipFOB = manualDipFOB;
+        } else {
           if (priceCalc.priceType === 'yellowBook') {
             dipFOB = priceCalc.priceValue * 0.85;
           } else if (priceCalc.priceType === 'webValue') {
@@ -399,7 +394,8 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       // Handle priceValue changes
       if (field === 'priceValue' && priceCalc.priceType === priceType) {
         // Recalculate DIP FOB based on new price value
-        if (!priceCalc.manualDipFOB) {
+        const manualDipFOB = getCurrentValue(vehicle._id, priceCalc.priceType, 'dipFOB');
+        if (!manualDipFOB) {
           if (priceType === 'yellowBook') {
             dipFOB = newValue * 0.85;
           } else if (priceType === 'webValue') {
@@ -408,9 +404,10 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
         }
       }
       
-      freight = field === 'freight' ? newValue : (vehicle.freight || 0);
-      insurance = field === 'insurance' ? newValue : (vehicle.insurance || 0);
-      other = field === 'other' ? newValue : (vehicle.other || 0);
+      // Use manual values for freight, insurance, other if they exist
+      freight = field === 'freight' ? newValue : (getCurrentValue(vehicle._id, priceCalc.priceType, 'freight') || vehicle.freight || 0);
+      insurance = field === 'insurance' ? newValue : (getCurrentValue(vehicle._id, priceCalc.priceType, 'insurance') || vehicle.insurance || 0);
+      other = field === 'other' ? newValue : (getCurrentValue(vehicle._id, priceCalc.priceType, 'other') || vehicle.other || 0);
       
       const cm3 = vehicle.cm3 || 0;
       const pUnit = vehicle.pPerUnitLKR || 0;
@@ -437,8 +434,6 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       const cifJPY1 = dipFOB + freight + insurance;
       const cifLKR1 = cifJPY1 * exchangeRate;
       
-      // FIX: Luxury tax calculation should be based on the correct formula
-      // The issue might be that luxTaxFD is too high or luxuryRate is 0
       const luxuryTaxCalculation = Math.max(0, cifLKR1 - luxTaxFD);
       const luxuryTax = luxuryTaxCalculation * luxuryRate;
       
@@ -576,6 +571,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     setDisplayData([...data]);
     if (!preserveCurrencySelection) {
       setIsDisplayDataModified(false);
+      setManualEdits({}); // NEW: Reset manual edits when data changes
     }
   }, [data, preserveCurrencySelection]);
 
@@ -611,6 +607,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     setAddingNew(true);
     setEditingId(null);
     setError("");
+    setStickyEditButtonsVisible(true); // NEW: Show floating buttons
     
     setTimeout(() => {
       focusField("hsCode");
@@ -634,10 +631,25 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     setEditingId(vehicle._id);
     setAddingNew(false);
     setError("");
+    setStickyEditButtonsVisible(true); // NEW: Show floating buttons
     
     setTimeout(() => {
       focusField("hsCode");
     }, 100);
+  };
+
+  // NEW: Handle row click for inline editing
+  const handleRowClick = (e, row) => {
+    // Don't trigger if clicking on an input, button, or already editing
+    if (editingId || addingNew || e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+      return;
+    }
+    
+    // Find the original vehicle data
+    const originalVehicle = data.find(v => v._id === (row.originalId || row._id));
+    if (originalVehicle && role === "ADMIN") {
+      handleEditStart(originalVehicle);
+    }
   };
 
   const handlePriceTypeChange = (priceType) => {
@@ -698,6 +710,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     setInputFieldOrder([]);
     setEditingCells({});
     setTempValues({});
+    setStickyEditButtonsVisible(false); // NEW: Hide floating buttons
   };
 
   const handleChange = (e) => {
@@ -802,11 +815,18 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     }
 
     // Find the original vehicle data
-    const originalVehicle = data.find(v => v._id === (row.originalId || row._id));
+    const originalVehicle = displayData.find(v => v._id === (row.originalId || row._id));
     if (!originalVehicle) {
       setError("Vehicle not found.");
       return;
     }
+
+    // NEW: Store the manual edit
+    const editKey = `${row.originalId || row._id}_${row.priceType}_${field}`;
+    setManualEdits(prev => ({
+      ...prev,
+      [editKey]: newValue
+    }));
 
     // Recalculate with the new value
     const updatedVehicle = recalculateWithManualValue(originalVehicle, field, newValue, row.priceType);
@@ -823,6 +843,14 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     setIsDisplayDataModified(true);
     handleCellEditCancel(row._id, row.priceType, field);
     setError("");
+  };
+
+  // NEW: Function to reset manual edits
+  const handleResetEdits = () => {
+    setManualEdits({});
+    setDisplayData([...data]);
+    setIsDisplayDataModified(false);
+    setError("All manual edits have been reset.");
   };
 
   const tableRows = [];
@@ -887,15 +915,26 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
         tableRows.push(legacyRow);
       } else {
         priceCalculations.forEach((priceCalc, index) => {
+          // NEW: Use getCurrentValue to get the current value (manual edit or original)
+          const currentPriceValue = getCurrentValue(vehicle._id, priceCalc.priceType, 'priceValue');
+          const currentDipFOB = getCurrentValue(vehicle._id, priceCalc.priceType, 'dipFOB');
+          const currentFreight = getCurrentValue(vehicle._id, priceCalc.priceType, 'freight');
+          const currentInsurance = getCurrentValue(vehicle._id, priceCalc.priceType, 'insurance');
+          const currentOther = getCurrentValue(vehicle._id, priceCalc.priceType, 'other');
+          
           const row = {
             ...vehicle, // Keep all original vehicle data
             _id: `${vehicle._id}_${index}`,
             originalId: vehicle._id,
             priceType: priceCalc.priceType,
-            priceValue: priceCalc.priceValue,
+            priceValue: currentPriceValue !== undefined ? currentPriceValue : priceCalc.priceValue,
+            // Use manual values if they exist
+            dipFOB: currentDipFOB !== undefined ? currentDipFOB : priceCalc.dipFOB,
+            freight: currentFreight !== undefined ? currentFreight : vehicle.freight,
+            insurance: currentInsurance !== undefined ? currentInsurance : vehicle.insurance,
+            other: currentOther !== undefined ? currentOther : vehicle.other,
             // Only override calculated fields, not input fields
             tax: priceCalc.tax,
-            dipFOB: priceCalc.dipFOB,
             cifJPY: priceCalc.cifJPY,
             cifLKR: priceCalc.cifLKR,
             generalDuty: priceCalc.generalDuty,
@@ -958,6 +997,59 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
 
   return (
     <div className="table-wrapper">
+      {/* NEW: Floating Edit/Save Buttons */}
+      {stickyEditButtonsVisible && (editingId || addingNew) && (
+        <div className="floating-edit-buttons" style={{
+          position: "fixed",
+          bottom: "20px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex",
+          gap: "10px",
+          backgroundColor: "#fff",
+          padding: "10px 15px",
+          borderRadius: "6px",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+          zIndex: 1000,
+          border: "1px solid #ddd"
+        }}>
+          <button
+            className="save-btn"
+            onClick={handleSubmit}
+            type="button"
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#28a745",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "600"
+            }}
+          >
+            Save Changes
+          </button>
+          <button
+            className="cancel-btn"
+            onClick={handleCancel}
+            type="button"
+            style={{
+              padding: "8px 16px",
+              backgroundColor: "#6c757d",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+              fontSize: "14px",
+              fontWeight: "600"
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       <div className="legend" style={{
         marginBottom: "7px",
         padding: "10px 15px",
@@ -1101,13 +1193,13 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
               <SearchBar 
                 search={search} 
                 setSearch={setSearch} 
-                placeholder="Search by Vehicle Model" 
+                placeholder="Search by Vehicle or HS" 
               />
             </div>
           </div>
         </div>
 
-        {/* Right section - Role indicator and Add Vehicle button */}
+        {/* Right section - Role indicator, Add Vehicle button, and Reset Edits button */}
         <div style={{ 
           display: "flex", 
           alignItems: "center", 
@@ -1127,6 +1219,27 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
             }}>
               AGENT VIEW
             </span>
+          )}
+
+          {/* Reset Edits Button - Only show when there are manual edits */}
+          {isDisplayDataModified && role === "ADMIN" && (
+            <button
+              onClick={handleResetEdits}
+              style={{
+                background: "#ffc107",
+                color: "#000",
+                padding: "6px 12px",
+                border: "none",
+                borderRadius: "4px",
+                cursor: "pointer",
+                fontWeight: "600",
+                fontSize: "13px",
+                whiteSpace: "nowrap",
+                flexShrink: 0
+              }}
+            >
+              Reset Edits
+            </button>
           )}
 
           {/* Add Vehicle Button - Only for ADMIN */}
@@ -1261,6 +1374,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                   key={row._id} 
                   style={getRowStyle(row.priceType, isEditing, isNewRow)}
                   className={`${row.isMultiRow ? 'multi-row-vehicle' : ''} ${isEditing ? 'editing-row' : ''}`}
+                  onClick={(e) => handleRowClick(e, row)} // NEW: Add row click handler
                 >
                   {(!row.isMultiRow || row.rowIndex === 0) && (
   <td 
@@ -1395,8 +1509,6 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                       fontSize: "9px",
                       fontWeight: "bold",
                       display: "block",
-                      textAlign: "center",
-                      minWidth: "20px"
                     }}
                   >
                     WV
@@ -1412,8 +1524,6 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                       fontSize: "9px",
                       fontWeight: "bold",
                       display: "block",
-                      textAlign: "center",
-                      minWidth: "20px"
                     }}
                   >
                     YB
@@ -1434,7 +1544,6 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                 fontSize: "10px",
                 fontWeight: "bold",
                 display: "block",
-                textAlign: "center"
               }}
             >
               WV
@@ -1450,7 +1559,6 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                 fontSize: "10px",
                 fontWeight: "bold",
                 display: "block",
-                textAlign: "center"
               }}
             >
               YB
