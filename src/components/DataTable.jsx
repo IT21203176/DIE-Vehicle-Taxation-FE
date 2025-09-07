@@ -997,6 +997,18 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
 
   return (
     <div className="table-wrapper">
+      {/* CSS to hide number input spinners */}
+    <style>{`
+      input[type=number]::-webkit-outer-spin-button,
+      input[type=number]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      
+      input[type=number] {
+        -moz-appearance: textfield;
+      }
+    `}</style>
       {/* NEW: Floating Edit/Save Buttons */}
       {stickyEditButtonsVisible && (editingId || addingNew) && (
         <div className="floating-edit-buttons" style={{
