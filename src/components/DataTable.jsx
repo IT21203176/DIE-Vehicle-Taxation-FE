@@ -649,7 +649,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     const allowedColumns = [
       "hsCode", "vehicleType", "fuelType", "engineCC", "cm3", 
       "pPerUnitLKR", "pPerCM3LKR", "rateCurrency", "exchangeRate", 
-      "luxTaxFD", "luxuryTaxRateValue", "priceValue"
+      "luxTaxFD", "luxuryTaxRateValue"
     ];
     
     // Get the clicked cell
@@ -1110,13 +1110,13 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
           flexShrink: 0
         }}>
           {/* Price Indicators */}
-          <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <span style={{ display: "flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap" }}>
               <span
                 style={{
                   backgroundColor: "#fff176",
                   color: "#000",
-                  fontSize: "14px",
+                  fontSize: "12px",
                   padding: "2px 8px",
                   borderRadius: "3px",
                   fontWeight: "bold",
@@ -1124,7 +1124,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
               >
                 YB
               </span>
-              = Yellow Book Price
+              = Yellow Book
             </span>
 
             <span style={{ display: "flex", alignItems: "center", gap: "5px", whiteSpace: "nowrap" }}>
@@ -1132,7 +1132,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                 style={{
                   backgroundColor: "#64b5f6",
                   color: "#fff",
-                  fontSize: "14px",
+                  fontSize: "12px",
                   padding: "2px 8px",
                   borderRadius: "3px",
                   fontWeight: "bold",
@@ -1150,7 +1150,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
             alignItems: "center", 
             gap: "15px",
             flexShrink: 0,
-            paddingLeft: "40px"
+            paddingLeft: "20px"
           }}>
             {/* Currency Selection */}
             <div style={{ display: "flex", alignItems: "center", gap: "8px", flexShrink: 0 }}>
@@ -1296,7 +1296,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                 fontSize: "13px",
                 whiteSpace: "nowrap",
                 flexShrink: 0,
-                marginRight: "1400px"
+                marginRight: "1600px"
               }}
             >
               + Add Vehicle
@@ -1363,7 +1363,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                   padding: "6px 4px",
                   textAlign: "center",
                   fontWeight: "bold",
-                  backgroundColor: "#f8f9fa",
+                  backgroundColor: col === "tax" ? "#000000" : "#f8f9fa",
                   border: "1px solid #dee2e6",
                   minWidth: role === "AGENT" ? "80px" : "100px",
                   position: "sticky",
@@ -1373,7 +1373,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                   fontSize: "11px",
                   lineHeight: "1.1",
                   height: col === 'priceValue' ? '45px' : '35px',
-                  color: redFontColumns.includes(col) ? "#55ff37ff" : "inherit"
+                  color: col === "tax" ? "#FFFF00" : (redFontColumns.includes(col) ? "#55ff37ff" : "inherit")
                 }}>
                   {formatColumnHeader(col)}
                 </th>
@@ -1626,6 +1626,17 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
                       };
                     } else {
                       columnCellStyle = getCellStyle(row.priceType, isEditing, isNewRow, col);
+                    }
+
+                    // Apply special styling for tax column
+                    if (col === "tax") {
+                      columnCellStyle = {
+                        backgroundColor: "#000000",
+                        color: "#FFFF00",
+                        fontWeight: "bold",
+                        border: "1px solid #dee2e6",
+                        boxShadow: "inset 0 0px 0 #ffffff, inset 0 -1px 0 #ffffff"
+                      };
                     }
 
                     const cellProps = shouldMerge && row.rowIndex === 0 ? { rowSpan: row.totalRows } : {};
