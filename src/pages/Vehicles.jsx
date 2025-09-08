@@ -84,7 +84,7 @@ const Vehicles = () => {
           style={{ width: "70px", height: "70px", objectFit: "contain" }} 
         />
         <div className="header-button">
-          <h2>Diason Imports & Exports - Vehicle Taxation Reader</h2>
+          <h2>Diason ImpEx - Vehicle Taxation Reader</h2>
         
         {error && <div className="error-message">{error}</div>}
         
