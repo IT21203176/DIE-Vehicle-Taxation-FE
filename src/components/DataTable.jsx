@@ -649,7 +649,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
     const allowedColumns = [
       "hsCode", "vehicleType", "fuelType", "engineCC", "cm3", 
       "pPerUnitLKR", "pPerCM3LKR", "rateCurrency", "exchangeRate", 
-      "luxTaxFD", "luxuryTaxRateValue"
+      "luxTaxFD", "luxuryTaxRateValue", "priceValue"
     ];
     
     // Get the clicked cell
