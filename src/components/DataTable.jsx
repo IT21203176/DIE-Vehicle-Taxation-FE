@@ -645,6 +645,31 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
       return;
     }
     
+    // NEW: Check if the clicked column is allowed for editing
+    const allowedColumns = [
+      "hsCode", "vehicleType", "fuelType", "engineCC", "cm3", 
+      "pPerUnitLKR", "pPerCM3LKR", "rateCurrency", "exchangeRate", 
+      "luxTaxFD", "luxuryTaxRateValue"
+    ];
+    
+    // Get the clicked cell
+    const cell = e.target.closest('td');
+    if (!cell) return;
+    
+    // Get column index of clicked cell
+    const cellIndex = Array.prototype.indexOf.call(cell.parentElement.children, cell);
+    
+    // Adjust index for manufacturer column (first column)
+    const columnIndex = cellIndex - 1; // Subtract 1 to account for manufacturer column
+    
+    // Get column key from displayColumns array
+    const columnKey = displayColumns[columnIndex];
+    
+    // Only proceed if clicked column is in allowed list
+    if (!allowedColumns.includes(columnKey)) {
+      return;
+    }
+    
     // Find the original vehicle data
     const originalVehicle = data.find(v => v._id === (row.originalId || row._id));
     if (originalVehicle && role === "ADMIN") {
@@ -992,6 +1017,7 @@ const DataTable = ({ data, role, onDelete, onRefresh }) => {
   ];
 
   const inlineEditableFields = ["priceValue", "dipFOB", "freight", "insurance", "other"];
+  
 
   if (filteredData.length === 0 && !addingNew && !editingId) return <p>No vehicles found</p>;
 
